@@ -1,0 +1,77 @@
+.env
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django migrations (optional - keep if you want history)
+**/migrations/
+!**/migrations/__init__.py
+
+# Environment
+.env
+.venv/
+env/
+venv/
+ENV/
+*.env
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and local DBs
+*.log
+*.sqlite3
+*.db
+
+# Coverage reports
+htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+.cache
+
+# Test output
+nosetests.xml
+test_*.xml
+junit-*.xml
+
+# MyPy and Pyright
+.mypy_cache/
+.dmypy.json
+.pytype/
+
+# PyInstaller
+*.manifest
+*.spec
+dist/
+build/
+
+# Static & media (optional if generated in production)
+staticfiles/
+media/
+
+# Pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Docker
+*.pid
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# VS Code settings
+.vscode/settings.json
+
+
+**/Lib/
+**/site-packages/
