@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-_55gh(k*=i9p&!08=3cbtvh79%fmzz@$mndn(+)60krxfkex#i
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DJANGO_DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('DJANGO_ALLOWED_HOSTS', default='').split(',')
+ALLOWED_HOSTS = ['omegasyncapiorg.imcbs.com']
 
 
 # Application definition
