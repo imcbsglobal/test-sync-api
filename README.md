@@ -1,6 +1,6 @@
-# - python -m venv omega1
+# - python -m venv venv
 
-# - omega1\Scripts\activate
+# - venv\Scripts\activate
 
 # - pip install django djangorestframework
 

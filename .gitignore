@@ -75,3 +75,8 @@ celerybeat.pid
 
 **/Lib/
 **/site-packages/
+
+
+# Virtual environment
+.venv/
+omega1/  # if you're no longer using this as virtualenv
