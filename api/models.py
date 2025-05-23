@@ -12,10 +12,8 @@ class AccInvMast(models.Model):
 
 
 class AccInvDetails(models.Model):
-    # Add an auto ID field since this table doesn't have a natural primary key
-    id = models.AutoField(primary_key=True)
     invno = models.DecimalField(max_digits=10, decimal_places=0)
-    code = models.CharField(max_length=30)
+    code = models.CharField(max_length=30, primary_key=True)
     quantity = models.DecimalField(max_digits=15, decimal_places=5)
 
     class Meta:
@@ -36,7 +34,48 @@ class AccProduct(models.Model):
     brand = models.CharField(max_length=30, null=True, blank=True)
     billedcost = models.DecimalField(
         max_digits=14, decimal_places=5, null=True, blank=True)
+    basicprice = models.DecimalField(max_digits=14, decimal_places=5, null=True, blank=True)
+    partqty = models.DecimalField(max_digits=15, decimal_places=5, null=True, blank=True)
 
     class Meta:
         db_table = 'acc_product'
+        managed = False
+
+
+class AccPurchaseMaster(models.Model):
+    slno = models.DecimalField(max_digits=10, decimal_places=0, primary_key=True)
+    date = models.DateField(null=True, blank=True)
+    pdate = models.DateField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'acc_purchasemaster'
+        managed = False
+
+
+class AccPurchaseDetails(models.Model):
+    billno = models.DecimalField(max_digits=10, decimal_places=0, primary_key=True)
+    code = models.CharField(max_length=30)
+    quantity = models.DecimalField(max_digits=15, decimal_places=5)
+
+    class Meta:
+        db_table = 'acc_purchasedetails'
+        managed = False
+
+
+class AccProduction(models.Model):
+    productionno = models.DecimalField(max_digits=20, decimal_places=0, primary_key=True)
+    date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'acc_production'
+        managed = False
+
+
+class AccProductionDetails(models.Model):
+    masterno = models.DecimalField(max_digits=30, decimal_places=0, primary_key=True)
+    code = models.CharField(max_length=30)
+    qty = models.DecimalField(max_digits=15, decimal_places=5)
+
+    class Meta:
+        db_table = 'acc_productiondetails'
         managed = False

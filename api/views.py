@@ -7,8 +7,15 @@ from django.http import JsonResponse
 import logging
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
-from .models import AccInvMast, AccInvDetails, AccProduct
-from .serializers import AccInvMastSerializer, AccInvDetailsSerializer, AccProductSerializer
+from .models import (
+    AccInvMast, AccInvDetails, AccProduct, AccPurchaseMaster, 
+    AccPurchaseDetails, AccProduction, AccProductionDetails
+)
+from .serializers import (
+    AccInvMastSerializer, AccInvDetailsSerializer, AccProductSerializer,
+    AccPurchaseMasterSerializer, AccPurchaseDetailsSerializer,
+    AccProductionSerializer, AccProductionDetailsSerializer
+)
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -40,7 +47,44 @@ TABLE_MAPPING = {
         'field_processors': {
             'quantity': lambda x: Decimal(str(x)) if x is not None else None,
             'openingquantity': lambda x: Decimal(str(x)) if x is not None else None,
-            'billedcost': lambda x: Decimal(str(x)) if x is not None else None
+            'billedcost': lambda x: Decimal(str(x)) if x is not None else None,
+            'basicprice': lambda x: Decimal(str(x)) if x is not None else None,
+            'partqty': lambda x: Decimal(str(x)) if x is not None else None
+        }
+    },
+    'acc_purchasemaster': {
+        'model': AccPurchaseMaster,
+        'serializer': AccPurchaseMasterSerializer,
+        'required_fields': ['slno'],
+        'field_processors': {
+            'slno': lambda x: int(float(x)) if x is not None else None,
+            'date': lambda x: datetime.strptime(x, '%Y-%m-%d').date() if isinstance(x, str) and x else x,
+            'pdate': lambda x: datetime.strptime(x, '%Y-%m-%d').date() if isinstance(x, str) and x else x
+        }
+    },
+    'acc_purchasedetails': {
+        'model': AccPurchaseDetails,
+        'serializer': AccPurchaseDetailsSerializer,
+        'required_fields': ['billno', 'code'],
+        'field_processors': {
+            'billno': lambda x: int(float(x)) if x is not None else None,  # FIX: Convert billno to int
+            'quantity': lambda x: Decimal(str(x)) if x is not None else None
+        }
+    },
+    'acc_production': {
+        'model': AccProduction,
+        'serializer': AccProductionSerializer,
+        'required_fields': ['productionno'],
+        'field_processors': {
+            'date': lambda x: datetime.strptime(x, '%Y-%m-%d').date() if isinstance(x, str) and x else x
+        }
+    },
+    'acc_productiondetails': {
+        'model': AccProductionDetails,
+        'serializer': AccProductionDetailsSerializer,
+        'required_fields': ['masterno', 'code'],
+        'field_processors': {
+            'qty': lambda x: Decimal(str(x)) if x is not None else None
         }
     }
 }
@@ -322,7 +366,7 @@ def sync_data_ultra_fast(request):
         if not table_name or table_name not in TABLE_MAPPING:
             return Response({
                 'success': False,
-                'error': 'Invalid table name'
+                'error': f'Invalid table name. Supported tables: {list(TABLE_MAPPING.keys())}'
             }, status=status.HTTP_400_BAD_REQUEST)
 
         Model = TABLE_MAPPING[table_name]['model']
@@ -369,8 +413,84 @@ def sync_data_ultra_fast(request):
             'error': f'Ultra-fast sync failed: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    # Home URL
 
-
+# Home URL
 def home(request):
     return HttpResponse("Welcome to the OMEGA Sync API 🚀")
+
+
+# Additional utility endpoints for individual table operations
+@api_view(['GET'])
+def get_table_info(request, table_name):
+    """
+    Get detailed information about a specific table
+    """
+    table_name = table_name.lower()
+    
+    if table_name not in TABLE_MAPPING:
+        return Response({
+            'success': False,
+            'error': f'Table {table_name} not found. Available tables: {list(TABLE_MAPPING.keys())}'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    try:
+        Model = TABLE_MAPPING[table_name]['model']
+        record_count = Model.objects.count()
+        
+        # Get field information
+        fields = []
+        for field in Model._meta.get_fields():
+            fields.append({
+                'name': field.name,
+                'type': field.__class__.__name__,
+                'null': getattr(field, 'null', False),
+                'blank': getattr(field, 'blank', False),
+                'primary_key': getattr(field, 'primary_key', False)
+            })
+        
+        return Response({
+            'success': True,
+            'table_name': table_name,
+            'model_name': Model.__name__,
+            'record_count': record_count,
+            'fields': fields,
+            'required_fields': TABLE_MAPPING[table_name]['required_fields']
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': f'Failed to get table info: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['DELETE'])
+def clear_table(request, table_name):
+    """
+    Clear all data from a specific table
+    """
+    table_name = table_name.lower()
+    
+    if table_name not in TABLE_MAPPING:
+        return Response({
+            'success': False,
+            'error': f'Table {table_name} not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    try:
+        Model = TABLE_MAPPING[table_name]['model']
+        
+        with transaction.atomic():
+            deleted_count = truncate_table_fast(Model)
+        
+        return Response({
+            'success': True,
+            'message': f'Successfully cleared table {table_name}',
+            'records_deleted': deleted_count
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': f'Failed to clear table: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
