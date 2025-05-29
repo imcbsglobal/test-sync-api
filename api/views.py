@@ -67,7 +67,7 @@ TABLE_MAPPING = {
         'serializer': AccPurchaseDetailsSerializer,
         'required_fields': ['billno', 'code'],
         'field_processors': {
-            'billno': lambda x: int(float(x)) if x is not None else None,  # FIX: Convert billno to int
+            'billno': lambda x: int(float(x)) if x is not None else None,
             'quantity': lambda x: Decimal(str(x)) if x is not None else None
         }
     },
@@ -188,10 +188,14 @@ def truncate_table_fast(Model):
             return deleted_count
 
 
+# Dictionary to track which tables have been truncated in the current sync session
+truncated_tables = {}
+
 @api_view(['POST'])
 def sync_data(request):
     """
-    Optimized sync endpoint that clears existing data and inserts new data for a specific table.
+    Modified sync endpoint that only truncates table on the FIRST batch, 
+    then appends subsequent batches.
     """
     try:
         # Validate request data
@@ -204,6 +208,8 @@ def sync_data(request):
         database = request.data.get('database', 'OMEGA')
         table_name = request.data.get('table', '').lower()
         data = request.data.get('data', [])
+        is_first_batch = request.data.get('is_first_batch', True)  # New parameter
+        is_last_batch = request.data.get('is_last_batch', True)   # New parameter
 
         # Validate required fields
         if not table_name:
@@ -229,23 +235,34 @@ def sync_data(request):
         Model = TABLE_MAPPING[table_name]['model']
 
         logger.info(
-            f"Starting optimized sync for table: {table_name}, records: {len(data)}")
+            f"Starting sync for table: {table_name}, records: {len(data)}, first_batch: {is_first_batch}")
         start_time = datetime.now()
 
         # Skip validation for empty data
         if not data:
-            with transaction.atomic():
-                deleted_count = truncate_table_fast(Model)
+            if is_first_batch:
+                with transaction.atomic():
+                    deleted_count = truncate_table_fast(Model)
+                    truncated_tables[table_name] = True
 
-            return Response({
-                'success': True,
-                'message': f'Successfully cleared {table_name}',
-                'table': table_name,
-                'records_processed': 0,
-                'records_deleted': deleted_count,
-                'records_inserted': 0,
-                'processing_time_seconds': (datetime.now() - start_time).total_seconds()
-            }, status=status.HTTP_200_OK)
+                return Response({
+                    'success': True,
+                    'message': f'Successfully cleared {table_name}',
+                    'table': table_name,
+                    'records_processed': 0,
+                    'records_deleted': deleted_count,
+                    'records_inserted': 0,
+                    'processing_time_seconds': (datetime.now() - start_time).total_seconds()
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': True,
+                    'message': f'No data to process for {table_name}',
+                    'table': table_name,
+                    'records_processed': 0,
+                    'records_inserted': 0,
+                    'processing_time_seconds': (datetime.now() - start_time).total_seconds()
+                }, status=status.HTTP_200_OK)
 
         # Fast validation and processing
         logger.info("Starting fast validation and processing...")
@@ -259,7 +276,6 @@ def sync_data(request):
             return Response({
                 'success': False,
                 'error': 'Data validation failed',
-                # Return first 5 errors
                 'validation_errors': validation_errors[:5],
                 'total_errors': len(validation_errors),
                 'sample_data': data[:2] if data else []
@@ -268,12 +284,19 @@ def sync_data(request):
         logger.info(
             f"Validation completed. Processing {len(validated_data)} valid records...")
 
-        # Perform the clear and insert operation in a transaction
+        # Perform the operation in a transaction
         with transaction.atomic():
-            # Step 1: Fast table truncation
-            deleted_count = truncate_table_fast(Model)
+            deleted_count = 0
+            
+            # Only truncate on the first batch
+            if is_first_batch:
+                deleted_count = truncate_table_fast(Model)
+                truncated_tables[table_name] = True
+                logger.info(f"Truncated table {table_name} (first batch)")
+            else:
+                logger.info(f"Appending to table {table_name} (subsequent batch)")
 
-            # Step 2: Optimized bulk insert
+            # Insert data
             if validated_data:
                 inserted_count = bulk_insert_optimized(
                     Model, validated_data, batch_size=5000)
@@ -292,11 +315,13 @@ def sync_data(request):
             'message': f'Successfully synced {len(validated_data)} records to {table_name}',
             'table': table_name,
             'records_processed': len(data),
-            'records_deleted': deleted_count if isinstance(deleted_count, int) else 'truncated',
+            'records_deleted': deleted_count if is_first_batch else 0,
             'records_inserted': inserted_count,
             'validation_errors': len(validation_errors),
             'processing_time_seconds': round(processing_time, 2),
-            'records_per_second': round(len(validated_data) / processing_time, 2) if processing_time > 0 else 0
+            'records_per_second': round(len(validated_data) / processing_time, 2) if processing_time > 0 else 0,
+            'is_first_batch': is_first_batch,
+            'is_last_batch': is_last_batch
         }
 
         logger.info(f"Sync completed for {table_name}: {response_data}")
@@ -308,6 +333,22 @@ def sync_data(request):
             'success': False,
             'error': f'Internal server error: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Add a new endpoint to reset truncation tracking
+@api_view(['POST'])
+def reset_sync_session(request):
+    """
+    Reset the sync session - clears truncation tracking
+    """
+    global truncated_tables
+    truncated_tables.clear()
+    logger.info("Sync session reset - truncation tracking cleared")
+    
+    return Response({
+        'success': True,
+        'message': 'Sync session reset successfully'
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -351,75 +392,12 @@ def health_check(request):
     }, status=status.HTTP_200_OK)
 
 
-# Additional optimization endpoint for very large datasets
-@api_view(['POST'])
-def sync_data_ultra_fast(request):
-    """
-    Ultra-fast sync for very large datasets (10k+ records) with minimal validation
-    Use this only when data quality is guaranteed at the source
-    """
-    try:
-        database = request.data.get('database', 'OMEGA')
-        table_name = request.data.get('table', '').lower()
-        data = request.data.get('data', [])
-
-        if not table_name or table_name not in TABLE_MAPPING:
-            return Response({
-                'success': False,
-                'error': f'Invalid table name. Supported tables: {list(TABLE_MAPPING.keys())}'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        Model = TABLE_MAPPING[table_name]['model']
-
-        logger.info(
-            f"Starting ULTRA-FAST sync for table: {table_name}, records: {len(data)}")
-        start_time = datetime.now()
-
-        with transaction.atomic():
-            # Ultra-fast truncate
-            truncate_table_fast(Model)
-
-            # Ultra-fast bulk insert with larger batches
-            if data:
-                batch_size = 10000  # Much larger batches
-                total_inserted = 0
-
-                for i in range(0, len(data), batch_size):
-                    batch = data[i:i + batch_size]
-                    instances = [Model(**item) for item in batch]
-                    Model.objects.bulk_create(instances, batch_size=batch_size)
-                    total_inserted += len(batch)
-
-                    if i % (batch_size * 5) == 0:  # Log every 5 batches
-                        logger.info(
-                            f"Ultra-fast inserted {total_inserted}/{len(data)} records")
-
-        processing_time = (datetime.now() - start_time).total_seconds()
-
-        return Response({
-            'success': True,
-            'message': f'Ultra-fast sync completed for {table_name}',
-            'table': table_name,
-            'records_processed': len(data),
-            'records_inserted': len(data),
-            'processing_time_seconds': round(processing_time, 2),
-            'records_per_second': round(len(data) / processing_time, 2) if processing_time > 0 else 0
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        logger.error(f"Ultra-fast sync failed: {str(e)}")
-        return Response({
-            'success': False,
-            'error': f'Ultra-fast sync failed: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 # Home URL
 def home(request):
     return HttpResponse("Welcome to the OMEGA Sync API 🚀")
 
 
-# Additional utility endpoints for individual table operations
+# Keep other endpoints unchanged...
 @api_view(['GET'])
 def get_table_info(request, table_name):
     """
@@ -475,7 +453,7 @@ def clear_table(request, table_name):
         return Response({
             'success': False,
             'error': f'Table {table_name} not found'
-        }, status=status.HTTP_404_NOT_FOUND)
+        }, status=status.HTTP_400_BAD_REQUEST)
     
     try:
         Model = TABLE_MAPPING[table_name]['model']
