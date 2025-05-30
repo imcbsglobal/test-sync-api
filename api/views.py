@@ -397,7 +397,7 @@ def home(request):
     return HttpResponse("Welcome to the OMEGA Sync API 🚀")
 
 
-# Keep other endpoints unchanged...
+
 @api_view(['GET'])
 def get_table_info(request, table_name):
     """
