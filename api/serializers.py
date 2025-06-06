@@ -1,7 +1,12 @@
 from rest_framework import serializers
-from .models import AccInvMast, AccInvDetails, AccProduct, AccPurchaseMaster, AccPurchaseDetails, AccProduction, AccProductionDetails
+from .models import AccInvMast, AccInvDetails, AccProduct, AccPurchaseMaster, AccPurchaseDetails, AccProduction, AccProductionDetails, AccUsers
 from decimal import Decimal
 
+
+class AccUsersSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AccUsers
+        fields = ['id', 'pass_field', 'role']
 
 class AccInvMastSerializer(serializers.ModelSerializer):
     class Meta:

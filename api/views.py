@@ -9,12 +9,12 @@ from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from .models import (
     AccInvMast, AccInvDetails, AccProduct, AccPurchaseMaster, 
-    AccPurchaseDetails, AccProduction, AccProductionDetails
+    AccPurchaseDetails, AccProduction, AccProductionDetails, AccUsers
 )
 from .serializers import (
     AccInvMastSerializer, AccInvDetailsSerializer, AccProductSerializer,
     AccPurchaseMasterSerializer, AccPurchaseDetailsSerializer,
-    AccProductionSerializer, AccProductionDetailsSerializer
+    AccProductionSerializer, AccProductionDetailsSerializer, AccUsersSerializer
 )
 
 # Setup logging
@@ -22,6 +22,16 @@ logger = logging.getLogger(__name__)
 
 # Map table names to models and serializers
 TABLE_MAPPING = {
+        'acc_users': {
+        'model': AccUsers,
+        'serializer': AccUsersSerializer,
+        'required_fields': ['id', 'pass_field'],
+        'field_processors': {
+            'id': lambda x: str(x).strip() if x is not None else None,
+            'pass_field': lambda x: str(x).strip() if x is not None else None,
+            'role': lambda x: str(x).strip() if x is not None else None
+        }
+    },
     'acc_invmast': {
         'model': AccInvMast,
         'serializer': AccInvMastSerializer,
@@ -208,8 +218,8 @@ def sync_data(request):
         database = request.data.get('database', 'OMEGA')
         table_name = request.data.get('table', '').lower()
         data = request.data.get('data', [])
-        is_first_batch = request.data.get('is_first_batch', True)  # New parameter
-        is_last_batch = request.data.get('is_last_batch', True)   # New parameter
+        is_first_batch = request.data.get('is_first_batch', True)  
+        is_last_batch = request.data.get('is_last_batch', True)  
 
         # Validate required fields
         if not table_name:

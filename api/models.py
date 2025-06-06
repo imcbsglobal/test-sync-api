@@ -1,6 +1,16 @@
 from django.db import models
 
 
+class AccUsers(models.Model):
+    id = models.CharField(max_length=30, primary_key=True)
+    pass_field = models.CharField(max_length=100, db_column='pass')
+    role = models.CharField(max_length=30, null=True, blank=True)
+
+    class Meta:
+        db_table = 'acc_users'
+        managed = False
+
+
 class AccInvMast(models.Model):
     slno = models.DecimalField(
         max_digits=10, decimal_places=0, primary_key=True)
