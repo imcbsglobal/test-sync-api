@@ -116,7 +116,7 @@ LOGGING = {
         'file': {
             'level': 'INFO',
             'class': 'logging.FileHandler',
-            'filename': 'omega_api.log',
+            'filename': str(BASE_DIR / 'logs' / 'omega_api.log'),
             'formatter': 'verbose',
         },
         'console': {
